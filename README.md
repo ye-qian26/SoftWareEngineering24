@@ -3,7 +3,7 @@
 
 # 1. 团队Logo
 
-# ![团队logo](D:\广工\学习资料\必修\大二下\软件工程\团队logo.png)
+# ![团队logo](https://raw.githubusercontent.com/ye-qian26/SoftWareEngineering24/main/assets/团队logo.png)
 
 ## Logo设计理念与生成过程
 
