@@ -21,9 +21,11 @@ public class ConversationService {
     
     public ConversationDTO createConversation(CreateConversationRequest request) {
         Conversation conversation = new Conversation();
-        conversation.setId(request.getConversationId());
+        String conversationId = request.getConversationId();
+        conversation.setId(conversationId);
         conversation.setUserId(request.getUserId());
-        conversation.setTitle("新会话");
+        int len = conversationId.length();
+        conversation.setTitle("会话 " + conversationId.substring(len - 6, len));
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         

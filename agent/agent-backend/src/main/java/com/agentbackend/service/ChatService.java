@@ -15,6 +15,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -55,6 +56,31 @@ public class ChatService {
         return response;
     }
     
+    public Flux<String> sendMessageStream(SendMessageRequest request) {
+        saveUserMessage(request.getConversationId(), request.getMessage());
+        
+        List<Message> historyMessages = getHistoryMessages(request.getConversationId());
+        
+        if (historyMessages.isEmpty()) {
+            String title = generateTitle(request.getMessage());
+            conversationService.updateConversationTitle(request.getConversationId(), title);
+        }
+        
+        conversationService.updateConversationTime(request.getConversationId());
+        
+        return callAIStream(historyMessages, request.getMessage());
+    }
+    
+    @Transactional
+    public void saveAssistantMessage(String conversationId, String content) {
+        Message message = new Message();
+        message.setConversationId(conversationId);
+        message.setRole("assistant");
+        message.setContent(content);
+        message.setCreatedAt(LocalDateTime.now());
+        messageMapper.insert(message);
+    }
+    
     public List<MessageDTO> getChatHistory(String conversationId) {
         List<Message> messages = getHistoryMessages(conversationId);
         return messages.stream()
@@ -71,15 +97,6 @@ public class ChatService {
         messageMapper.insert(message);
     }
     
-    private void saveAssistantMessage(String conversationId, String content) {
-        Message message = new Message();
-        message.setConversationId(conversationId);
-        message.setRole("assistant");
-        message.setContent(content);
-        message.setCreatedAt(LocalDateTime.now());
-        messageMapper.insert(message);
-    }
-    
     private List<Message> getHistoryMessages(String conversationId) {
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Message::getConversationId, conversationId)
@@ -88,9 +105,31 @@ public class ChatService {
     }
     
     private String callAI(List<Message> historyMessages, String currentMessage) {
+        List<org.springframework.ai.chat.messages.Message> messages = buildMessages(historyMessages, currentMessage, true);
+        
+        ChatClient chatClient = chatClientBuilder.build();
+        
+        return chatClient.prompt(new Prompt(messages))
+                .call()
+                .content();
+    }
+    
+    private Flux<String> callAIStream(List<Message> historyMessages, String currentMessage) {
+        List<org.springframework.ai.chat.messages.Message> messages = buildMessages(historyMessages, currentMessage, true);
+        
+        ChatClient chatClient = chatClientBuilder.build();
+        
+        return chatClient.prompt(new Prompt(messages))
+                .stream()
+                .content();
+    }
+    
+    private List<org.springframework.ai.chat.messages.Message> buildMessages(List<Message> historyMessages, String currentMessage, boolean includeSystem) {
         List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
         
-        messages.add(new SystemMessage("你是一个友好的AI助手，请用中文回答用户的问题。"));
+        if (includeSystem) {
+            messages.add(new SystemMessage("你是一个友好的AI助手，请用中文回答用户的问题"));
+        }
         
         for (Message msg : historyMessages) {
             if ("user".equals(msg.getRole())) {
@@ -101,12 +140,7 @@ public class ChatService {
         }
         
         messages.add(new UserMessage(currentMessage));
-        
-        Prompt prompt = new Prompt(messages);
-        
-        ChatClient chatClient = chatClientBuilder.build();
-        
-        return chatClient.prompt(prompt).call().content();
+        return messages;
     }
     
     private String generateTitle(String firstMessage) {
