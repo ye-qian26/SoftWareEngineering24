@@ -70,3 +70,6 @@ agent-frontend/.env
 # Environment variables (sensitive)
 .env
 !.env.example
+
+### trae
+.trae/
