@@ -1,24 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import './App.css';
 import ConversationList from './components/ConversationList';
 import ChatWindow from './components/ChatWindow';
-import { createConversation, getConversationList } from './api/conversation';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { createConversation, getConversationList } from './api/user';
 
-function App() {
+function ChatApp() {
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
-  const [userId] = useState(1);
-  const messagesEndRef = useRef(null);
+  const [userId, setUserId] = useState(() => parseInt(localStorage.getItem('userId') || '0'));
+  const [username, setUsername] = useState(localStorage.getItem('username') || '');
+  const navigate = useNavigate();
 
   useEffect(() => {
-    loadConversations();
-  }, []);
+    if (!localStorage.getItem('token')) {
+      navigate('/login');
+    } else {
+      loadConversations();
+      setUserId(parseInt(localStorage.getItem('userId') || '0'));
+      setUsername(localStorage.getItem('username') || '');
+    }
+  }, [navigate]);
 
   const loadConversations = async () => {
     try {
-      const response = await getConversationList(userId);
-      if (response.code === 200) {
-        setConversations(response.data);
+      const storedUserId = parseInt(localStorage.getItem('userId') || '0');
+      if (storedUserId) {
+        const response = await getConversationList(storedUserId);
+        if (response.code === 200) {
+          setConversations(response.data);
+        }
       }
     } catch (error) {
       console.error('加载会话列表失败:', error);
@@ -27,8 +40,9 @@ function App() {
 
   const handleCreateConversation = async () => {
     try {
+      const storedUserId = parseInt(localStorage.getItem('userId') || '0');
       const conversationId = generateUUID();
-      const response = await createConversation(conversationId, userId);
+      const response = await createConversation(conversationId, storedUserId);
       if (response.code === 200) {
         setConversations([response.data, ...conversations]);
         setCurrentConversation(response.data);
@@ -40,6 +54,13 @@ function App() {
 
   const handleSelectConversation = (conversation) => {
     setCurrentConversation(conversation);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    navigate('/login');
   };
 
   const generateUUID = () => {
@@ -55,6 +76,10 @@ function App() {
       <div className="sidebar">
         <div className="sidebar-header">
           <h2>AI 对话助手</h2>
+          <div className="user-info">
+            <span>欢迎, {username}</span>
+            <button className="logout-btn" onClick={handleLogout}>退出</button>
+          </div>
           <button className="new-chat-btn" onClick={handleCreateConversation}>
             + 新建会话
           </button>
@@ -70,7 +95,6 @@ function App() {
           <ChatWindow
             conversation={currentConversation}
             userId={userId}
-            messagesEndRef={messagesEndRef}
           />
         ) : (
           <div className="empty-state">
@@ -80,6 +104,19 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/" element={<ChatApp />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

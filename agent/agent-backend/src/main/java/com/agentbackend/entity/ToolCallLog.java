@@ -8,15 +8,23 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("user")
-public class User {
+@TableName("tool_call_log")
+public class ToolCallLog {
     
     @TableId(type = IdType.AUTO)
     private Long id;
     
-    private String username;
+    private String conversationId;
     
-    private String password;
+    private String toolName;
+    
+    private String toolArgs;
+    
+    private String result;
+    
+    private Boolean success;
+    
+    private String errorMessage;
     
     private LocalDateTime createdAt;
 }

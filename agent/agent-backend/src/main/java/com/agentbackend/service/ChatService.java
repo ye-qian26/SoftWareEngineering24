@@ -13,6 +13,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -32,21 +33,32 @@ public class ChatService {
     private ConversationService conversationService;
     
     @Autowired
-    private ChatClient.Builder chatClientBuilder;
+    private ChatClient chatClient;
+    
+    @Autowired
+    private AgentService agentService;
+    
+    @Value("${agent.tools.enabled:true}")
+    private boolean toolsEnabled;
     
     @Transactional
     public SendMessageResponse sendMessage(SendMessageRequest request) {
         saveUserMessage(request.getConversationId(), request.getMessage());
         
-        List<Message> historyMessages = getHistoryMessages(request.getConversationId());
-        
-        String aiReply = callAI(historyMessages, request.getMessage());
+        String aiReply;
+        if (toolsEnabled) {
+            aiReply = agentService.chatWithTools(request.getConversationId(), request.getMessage());
+        } else {
+            List<Message> historyMessages = getHistoryMessages(request.getConversationId());
+            aiReply = callAI(historyMessages, request.getMessage());
+        }
         
         saveAssistantMessage(request.getConversationId(), aiReply);
         
         conversationService.updateConversationTime(request.getConversationId());
         
-        if (historyMessages.isEmpty()) {
+        List<Message> historyMessages = getHistoryMessages(request.getConversationId());
+        if (historyMessages.size() <= 2) {
             String title = generateTitle(request.getMessage());
             conversationService.updateConversationTitle(request.getConversationId(), title);
         }
@@ -61,14 +73,18 @@ public class ChatService {
         
         List<Message> historyMessages = getHistoryMessages(request.getConversationId());
         
-        if (historyMessages.isEmpty()) {
+        if (historyMessages.size() <= 1) {
             String title = generateTitle(request.getMessage());
             conversationService.updateConversationTitle(request.getConversationId(), title);
         }
         
         conversationService.updateConversationTime(request.getConversationId());
         
-        return callAIStream(historyMessages, request.getMessage());
+        if (toolsEnabled) {
+            return agentService.chatWithToolsStream(request.getConversationId(), request.getMessage());
+        } else {
+            return callAIStream(historyMessages, request.getMessage());
+        }
     }
     
     @Transactional
@@ -107,8 +123,6 @@ public class ChatService {
     private String callAI(List<Message> historyMessages, String currentMessage) {
         List<org.springframework.ai.chat.messages.Message> messages = buildMessages(historyMessages, currentMessage, true);
         
-        ChatClient chatClient = chatClientBuilder.build();
-        
         return chatClient.prompt(new Prompt(messages))
                 .call()
                 .content();
@@ -116,8 +130,6 @@ public class ChatService {
     
     private Flux<String> callAIStream(List<Message> historyMessages, String currentMessage) {
         List<org.springframework.ai.chat.messages.Message> messages = buildMessages(historyMessages, currentMessage, true);
-        
-        ChatClient chatClient = chatClientBuilder.build();
         
         return chatClient.prompt(new Prompt(messages))
                 .stream()

@@ -8,6 +8,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -44,6 +46,20 @@ public class ConversationService {
         return conversations.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
+    }
+    
+    public Conversation getConversationById(String conversationId) {
+        return conversationMapper.selectById(conversationId);
+    }
+    
+    public void validateConversationOwnership(String conversationId, Long userId) {
+        Conversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "会话不存在");
+        }
+        if (!conversation.getUserId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权访问该会话");
+        }
     }
     
     public void updateConversationTitle(String conversationId, String title) {
